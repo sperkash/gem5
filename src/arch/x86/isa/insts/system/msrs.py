@@ -73,4 +73,13 @@ def macroop RDTSCP
     srli rdx, t1, 32, dataSize=8
     rdval rcx, ctrlRegIdx("misc_reg::TscAux"), dataSize=4
 };
+
+def macroop RDTSCP
+{
+    .block
+    rdtsc t1
+    mov rax, rax, t1, dataSize=4
+    srli t1, t1, 32, dataSize=8
+    mov rdx, rdx, t1, dataSize=4
+}
 '''

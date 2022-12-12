@@ -138,6 +138,7 @@
                     0x3: decode MODRM_RM {
                         0x0: Cpl0Inst::SWAPGS();
                         0x1: Inst::RDTSCP();
+                        //rdtscp();
                         default: Inst::UD2();
                     }
                     default: Cpl0Inst::INVLPG(M);

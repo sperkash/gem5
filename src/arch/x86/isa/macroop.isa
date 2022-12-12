@@ -143,6 +143,9 @@ let {{
             self.serialize_before = True
         def serializeAfter(self):
             self.serialize_after = True
+        # define directive [mengjia]
+        def block(self):
+            self.block = True
 
         def function_call(self):
             self.function_call = True
@@ -161,6 +164,8 @@ let {{
                 "adjust_disp" : self.adjustDisp,
                 "serialize_before" : self.serializeBefore,
                 "serialize_after" : self.serializeAfter,
+                # add directives block [mengjia]
+                "block" : self.block,
                 "function_call" : self.function_call,
                 "function_return" : self.function_return,
                 "control_direct" : self.control_direct,
@@ -181,6 +186,8 @@ let {{
             '''
             self.serialize_before = False
             self.serialize_after = False
+            # initialize as false [mengjia]
+            self.block = False
             self.function_call = False
             self.function_return = False
             self.control_direct = False
@@ -226,6 +233,10 @@ let {{
                     if self.serialize_after:
                         flags.append("IsSerializing")
                         flags.append("IsSerializeAfter")
+                    # add new attribute for block [mengjia]
+                    if self.block:
+                        flags.append("IsBlock")
+                        flags.append("IsSerializeBefore")
 
                     if self.function_call:
                         flags.append("IsCall")

@@ -397,6 +397,17 @@ TLB::translate(const RequestPtr &req,
                 stats.wrAccesses++;
             }
             if (!entry) {
+                    if(req->isSpec()){
+                    // [InvisiSpec] do not perform TLB fill for
+                    // speculative load
+                    specMisses++;
+                    DPRINTF(TLB, "Get a TLB miss for a speculative load "
+                            "address %#x at pc %#x.\n",
+                            vaddr, tc->instAddr());
+                    //FIXME: currently reuse the GeneralProtection fault
+                    //instead of creating new faults
+                    return std::make_shared<GeneralProtection>(0);
+                }
                 DPRINTF(TLB, "Handling a TLB miss for "
                         "address %#x at pc %#x.\n",
                         vaddr, tc->pcState().instAddr());
@@ -548,7 +559,9 @@ TLB::TlbStats::TlbStats(statistics::Group *parent)
     ADD_STAT(rdMisses, statistics::units::Count::get(),
              "TLB misses on read requests"),
     ADD_STAT(wrMisses, statistics::units::Count::get(),
-             "TLB misses on write requests")
+             "TLB misses on write requests"),
+    ADD_STAT(specMisses, statistics::units::Count::get(),
+         "TLB misses on speculative memory requests")
 {
 }
 

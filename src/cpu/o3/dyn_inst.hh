@@ -168,6 +168,20 @@ class DynInst : public ExecContext, public RefCounted
                                  /// instructions ahead of it
         SerializeAfter,          /// Needs to serialize instructions behind it
         SerializeHandled,        /// Serialization has been handled
+
+        SpecCompleted,           /// [mengjia] indicates whether received specReadResp
+        ValidationCompleted,     /// indicates whether validation finishes
+        ExposeCompleted,
+        ExposeSent,              /// indicates whether expose finishes
+                                 /// (should set when expose is sent out)
+        PrevInstsCompleted,      /// indicate whether previous instructions completed
+        PrevBrsResolved,         /// [mengjia] indicate whether previous branches are resolved
+        PrevInstsCommitted,      /// indicate whether previous instructions committed
+        PrevBrsCommitted,        /// [mengjia] indicate whether previous branches are committed
+        L1HitHigh,
+        L1HitLow,
+        SpecBuffObsoleteHigh,
+        SpecBuffObsoleteLow,     /// [InvisiSpec] it hits in L1 and is open to invalidations
         NumStatus
     };
 
@@ -186,6 +200,22 @@ class DynInst : public ExecContext, public RefCounted
         IsStrictlyOrdered,
         ReqMade,
         MemOpDone,
+        // [mengjia] indicates need validation or expose
+        NeedPostFetch,
+        NeedDeletePostReq,
+        // [mengjia] indicates only need to expose, do not need to validate
+        NeedExposeOnly,
+        // [InvisiSpec] indicate the instruction needs to be delayed
+        // due to virtual fences before to defend against speculative attacks
+        FenceDelay,
+        // [InvisiSpec] indicate the load is legal to be visible
+        ReadyToExpose,
+        HitInvalidation,
+        HitExternalEviction,
+        ValidationFail,
+        OnlyWaitForFence,
+        OnlyWaitForExpose,
+        SpecTLBMiss,
         HtmFromTransaction,
         MaxFlags
     };
@@ -346,6 +376,9 @@ class DynInst : public ExecContext, public RefCounted
     /** Pointer to the data for the memory access. */
     uint8_t *memData = nullptr;
 
+    /** Pointer to the data for the validation result. */
+    uint8_t *vldData;
+
     /** Load queue index. */
     ssize_t lqIdx = -1;
     typename LSQUnit::LQIterator lqIt;
@@ -362,6 +395,10 @@ class DynInst : public ExecContext, public RefCounted
      */
     LSQ::LSQRequest *savedRequest;
 
+    /** [InvisiSpec]
+     * Saved memory requests (needed for post-fetch validation/expose).
+     */
+    LSQ::LSQRequest *postRequest;
     /////////////////////// Checker //////////////////////
     // Need a copy of main request pointer to verify on writes.
     RequestPtr reqToVerify;
@@ -378,9 +415,45 @@ class DynInst : public ExecContext, public RefCounted
     bool memOpDone() const { return instFlags[MemOpDone]; }
     void memOpDone(bool f) { instFlags[MemOpDone] = f; }
 
+    /** [mengjia] Whether or not need pseudo-validation.
+     * whether speculative load finishes,
+     * whether validation completes or not (success) */
+    bool needExposeOnly() const { return instFlags[NeedExposeOnly]; }
+    void needExposeOnly(bool f) { instFlags[NeedExposeOnly] = f; }
+
+    bool needPostFetch() const { return instFlags[NeedPostFetch]; }
+    void needPostFetch(bool f) { instFlags[NeedPostFetch] = f; }
+
+    bool needDeletePostReq() const { return instFlags[NeedDeletePostReq]; }
+    void needDeletePostReq(bool f) { instFlags[NeedDeletePostReq] = f; }
+
+    bool fenceDelay() const { return instFlags[ReadyToExpose]; }
+    void fenceDelay(bool f) { instFlags[ReadyToExpose] = f; }
+
+    bool readyToExpose() const { return instFlags[FenceDelay]; }
+    void readyToExpose(bool f) { instFlags[FenceDelay] = f; }
+
+    bool hitInvalidation() const { return instFlags[HitInvalidation]; }
+    void hitInvalidation(bool f) { instFlags[HitInvalidation] = f; }
+
+    bool hitExternalEviction() const { return instFlags[HitExternalEviction]; }
+    void hitExternalEviction(bool f) { instFlags[HitExternalEviction] = f; }
+
+    bool validationFail() const { return instFlags[ValidationFail]; }
+    void validationFail(bool f) { instFlags[ValidationFail] = f; }
+
+    bool onlyWaitForFence() const { return instFlags[OnlyWaitForFence]; }
+    void onlyWaitForFence(bool f) { instFlags[OnlyWaitForFence] = f; }
+
+    bool onlyWaitForExpose() const { return instFlags[OnlyWaitForExpose]; }
+    void onlyWaitForExpose(bool f) { instFlags[OnlyWaitForExpose] = f; }
+
+    bool specTLBMiss() const { return instFlags[SpecTLBMiss]; }
+    void specTLBMiss(bool f) { instFlags[SpecTLBMiss] = f; }
+    /*[mengjia] added 2 new flags and corresponding functions*/
+
     bool notAnInst() const { return instFlags[NotAnInst]; }
     void setNotAnInst() { instFlags[NotAnInst] = true; }
-
 
     ////////////////////////////////////////////
     //
@@ -556,6 +629,10 @@ class DynInst : public ExecContext, public RefCounted
     bool isCondCtrl()     const { return staticInst->isCondCtrl(); }
     bool isUncondCtrl()   const { return staticInst->isUncondCtrl(); }
     bool isSerializing()  const { return staticInst->isSerializing(); }
+
+    // add block attribute for synamic instruction type [mengjia]
+    bool isBlock()  const { return staticInst->isBlock(); }
+
     bool
     isSerializeBefore() const
     {
@@ -732,6 +809,49 @@ class DynInst : public ExecContext, public RefCounted
 
     /** Returns whether or not this instruction is completed. */
     bool isCompleted() const { return status[Completed]; }
+
+    /* [mengjia] new status for load operations */
+    //void setSpecSent() { status.set(SpecSent); }
+    //bool isSpecSent() const { return status[SpecSent]; }
+
+    void setSpecCompleted() { status.set(SpecCompleted); }
+    bool isSpecCompleted() const { return status[SpecCompleted]; }
+
+    void setValidationCompleted() { status.set(ValidationCompleted); }
+    bool isValidationCompleted() const { return status[ValidationCompleted]; }
+
+    void setExposeCompleted() { status.set(ExposeCompleted); }
+    bool isExposeCompleted() const { return status[ExposeCompleted]; }
+
+    void setExposeSent() { status.set(ExposeSent); }
+    bool isExposeSent() const { return status[ExposeSent]; }
+
+    void setL1HitHigh() { status.set(L1HitHigh); }
+    void clearL1HitHigh() { status.reset(L1HitHigh); }
+    bool isL1HitHigh() const { return status[L1HitHigh]; }
+
+    void setL1HitLow() { status.set(L1HitLow); }
+    void clearL1HitLow() { status.reset(L1HitLow); }
+    bool isL1HitLow() const { return status[L1HitLow]; }
+
+    void setPrevInstsCompleted() { status.set(PrevInstsCompleted); }
+    bool isPrevInstsCompleted() const { return status[PrevInstsCompleted]; }
+
+    void setSpecBuffObsoleteHigh() { status.set(SpecBuffObsoleteHigh); }
+    bool isSpecBuffObsoleteHigh() const { return status[SpecBuffObsoleteHigh]; }
+
+    void setSpecBuffObsoleteLow() { status.set(SpecBuffObsoleteLow); }
+    bool isSpecBuffObsoleteLow() const { return status[SpecBuffObsoleteLow]; }
+
+    void setPrevBrsResolved() { status.set(PrevBrsResolved); }
+    bool isPrevBrsResolved() const { return status[PrevBrsResolved]; }
+
+    void setPrevInstsCommitted() { status.set(PrevInstsCommitted); }
+    bool isPrevInstsCommitted() const { return status[PrevInstsCommitted]; }
+
+    void setPrevBrsCommitted() { status.set(PrevBrsCommitted); }
+    bool isPrevBrsCommitted() const { return status[PrevBrsCommitted]; }
+    /* Configure load related status */
 
     /** Marks the result as ready. */
     void setResultReady() { status.set(ResultReady); }
