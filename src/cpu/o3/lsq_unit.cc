@@ -698,7 +698,6 @@ LSQUnit::executeStore(const DynInstPtr &store_inst)
             iewStage->instToCommit(store_inst);
             iewStage->activityThisCycle();
         }
-
         return store_fault;
     }
 
@@ -1314,6 +1313,7 @@ LSQUnit::cacheLineSize()
     return cpu->cacheLineSize();
 }
 
+// IMPORTANT: the function to issue packets, interact with memory [mengjia]
 Fault
 LSQUnit::read(LSQRequest *request, ssize_t load_idx)
 {
@@ -1357,6 +1357,7 @@ LSQUnit::read(LSQRequest *request, ssize_t load_idx)
             request->mainReq()->getPaddr(), request->isSplit() ? " split" :
             "");
 
+    // LLSC: load-link/store-conditional [mengjia]
     if (request->mainReq()->isLLSC()) {
         // Disable recording the result temporarily.  Writing to misc
         // regs normally updates the result, but this is not the

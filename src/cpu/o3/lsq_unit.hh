@@ -529,6 +529,13 @@ class LSQUnit
      */
     typename StoreQueue::iterator storeWBIt;
 
+    /// @todo Consider moving to a more advanced model with write vs read ports
+    /** The number of cache ports available each cycle (stores only). */
+    int cacheStorePorts;
+
+    /** [InvisiSpec] The number of used cache ports in this cycle by stores. */
+    int usedStorePorts;
+
     /** Address Mask for a cache block (e.g. ~(cache_block_size-1)) */
     Addr cacheBlockMask;
 
@@ -547,8 +554,11 @@ class LSQUnit
     /** The packet that needs to be retried. */
     PacketPtr retryPkt;
 
-    /** Whehter or not a store is blocked due to the memory system. */
+    /** Whether or not a store is blocked due to the memory system. */
     bool isStoreBlocked;
+
+    /** Whether or not a validation is blocked due to the memory system. */
+    bool isValidationBlocked;
 
     /** Whether or not a store is in flight. */
     bool storeInFlight;
@@ -556,10 +566,22 @@ class LSQUnit
     /** The oldest load that caused a memory ordering violation. */
     DynInstPtr memDepViolator;
 
+    /* [mengjia] define scheme variables */
+    // Flag for whether issue packets in execution stage
+    bool loadInExec;
+
+    // Flag for whether to use invisible speculative load
+    bool isInvisibleSpec;
+
     /** Flag for memory model. */
     bool needsTSO;
 
-  protected:
+    // Flag for whether defending against spectre attack or future attacks
+    bool isFuturistic;
+    bool allowSpecBuffHit;
+    /* [mengjia] different schemes determine values of 4 variables. */
+
+protected:
     // Will also need how many read/write ports the Dcache has.  Or keep track
     // of that in stage that is one level up, and only call executeLoad/Store
     // the appropriate number of times.
@@ -588,6 +610,13 @@ class LSQUnit
 
         /** Number of times the LSQ is blocked due to the cache. */
         statistics::Scalar blockedByCache;
+
+        // [InvisiSpec]
+        statistics::Scalar specBuffHits;
+        statistics::Scalar SpecBufMisses
+        statistics::Scalar numValidates;
+        statistics::Scalar numExposes;
+        statistics::Scalar numConvertedExposes;
 
         /** Distribution of cycle latency between the first time a load
          * is issued and its completion */
