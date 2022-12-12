@@ -738,6 +738,11 @@ LSQ::numStoresToWB(ThreadID tid)
     return thread.at(tid).numStoresToWB();
 }
 
+LSQ::numLoadsToVLD(ThreadID tid)
+{
+    return thread.at(tid).numLoadsToVLD();
+}
+
 bool
 LSQ::willWB()
 {

@@ -402,11 +402,113 @@ Fault
 DynInst::initiateMemRead(Addr addr, unsigned size, Request::Flags flags,
                                const std::vector<bool> &byte_enable)
 {
-    assert(byte_enable.size() == size);
-    return cpu->pushRequest(
-        dynamic_cast<DynInstPtr::PtrType>(this),
-        /* ld */ true, nullptr, size, addr, flags, nullptr, nullptr,
-        byte_enable);
+    // [InvisiSpec] do not start translation if
+    // there is a virtual fence ahead
+    assert(!fenceDelay());
+
+    if ( (flags.isSet(Request::ATOMIC_RETURN_OP)
+            || flags.isSet(Request::ATOMIC_NO_RETURN_OP)
+            || flags.isSet(Request::UNCACHEABLE)
+            || flags.isSet(Request::LLSC)
+            || flags.isSet(Request::STRICT_ORDER))
+            && !readyToExpose()){
+        onlyWaitForExpose(true);
+        // FIXME: reschedule due to LLSC
+        // reuse TLBMiss for now
+        specTLBMiss(true);
+        return NoFault;
+    }
+
+    instFlags[ReqMade] = true;
+    instFlags[SpecTLBMiss] = false;
+    Request *req = NULL;
+    Request *sreqLow = NULL;
+    Request *sreqHigh = NULL;
+
+    if (instFlags[ReqMade] && translationStarted()) {
+        req = savedReq;
+        sreqLow = savedSreqLow;
+        sreqHigh = savedSreqHigh;
+    } else {
+        req = new Request(asid, addr, size, flags, masterId(), this->pc.instAddr(),
+                          thread->contextId());
+
+        req->taskId(cpu->taskId());
+        if(!readyToExpose()){
+            req->setFlags(Request::SPEC);
+        }
+        // Only split the request if the ISA supports unaligned accesses.
+        if (TheISA::HasUnalignedMemAcc) {
+            splitRequest(req, sreqLow, sreqHigh);
+        }
+
+        initiateTranslation(req, sreqLow, sreqHigh, NULL, BaseTLB::Read);
+
+    }
+
+    if (translationCompleted()) {
+        // [InvisiSpec] to fix the memory leakage problem
+        // in the case the read is squashed and the request
+        // is never sent out due to a virtual fence ahead
+        if (fault == NoFault) {
+            /*
+            if (fenceDelay()){
+                translationStarted(false);
+                translationCompleted(false);
+                onlyWaitForFence(true);
+                delete req;
+                if (sreqLow){
+                    delete sreqLow;
+                    delete sreqHigh;
+                }
+                return NoFault;
+            }
+            */
+            effAddr = req->getVaddr();
+            effSize = size;
+            instFlags[EffAddrValid] = true;
+
+            if (cpu->checker) {
+                if (reqToVerify != NULL) {
+                    delete reqToVerify;
+                }
+                reqToVerify = new Request(*req);
+            }
+
+            // issue load request [mengjia]
+            fault = cpu->read(req, sreqLow, sreqHigh, lqIdx);
+        } else {
+            // Commit will have to clean up whatever happened.  Set this
+            // instruction as executed.
+
+            // [InvisiSpec] If it is a fault on translating a spec load
+            // Deffer it and retry when it is ready to expose
+            if (!readyToExpose()){
+                translationStarted(false);
+                translationCompleted(false);
+                onlyWaitForExpose(true);
+                specTLBMiss(true);
+                //delete req;
+                //if (sreqLow){
+                //    delete sreqLow;
+                //    delete sreqHigh;
+                //}
+                return NoFault;
+            }
+            // set it as executed and fault flag.
+            // when it enters ROB and try to commit,
+            // the commit stage will squash this inst [mengjia]
+            this->setExecuted();
+        }
+    }
+
+    if (traceData)
+        traceData->setMem(addr, size, flags);
+
+    return fault;
+}
+
+
 }
 
 Fault

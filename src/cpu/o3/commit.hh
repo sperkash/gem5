@@ -428,6 +428,7 @@ class Commit
 
     /** The sequence number of the last commited instruction. */
     InstSeqNum lastCommitedSeqNum[MaxThreads];
+    Tick lastCommitTick;
 
     /** Records if there is a trap currently in flight. */
     bool trapInFlight[MaxThreads];
@@ -483,14 +484,14 @@ class Commit
         // [InvisiSpec] count #squash
         /** Stat for the total number of invalidation packets
          * that caused a squash. */
-        Stats::Scalar loadHitInvalidations;
-        Stats::Scalar loadHitExternalEvictions;
+        statistics::Scalar loadHitInvalidations;
+        statistics::Scalar loadHitExternalEvictions;
         /** Stat for the total number of failed validations
          * that caused a squash. */
-        Stats::Scalar loadValidationFails;
+        statistics::Scalar loadValidationFails;
         // [InvisiSpec] count cycles stall due to waiting for
         // validation responses
-        Stats::Scalar validationStalls;
+        statistics::Scalar validationStalls;
 
         /** Distribution of the number of committed instructions each cycle. */
         statistics::Distribution numCommittedDist;
