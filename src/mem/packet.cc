@@ -228,7 +228,6 @@ MemCmd::commandInfo[] =
     /* Invalidation Response */
     { {IsInvalidate, IsResponse},
       InvalidCmd, "InvalidateResp" },
-
     /* [InvisiSpec] New command info */
     { SET4(IsRead, IsRequest, NeedsResponse, IsSpec),
       ReadSpecResp, "ReadSpecReq" },
@@ -245,8 +244,7 @@ MemCmd::commandInfo[] =
     { SET3(IsRequest, NeedsResponse, IsSpecFlush),
       SpecFlushResp, "SpecFlushReq" },
     { SET2(IsResponse, IsSpecFlush),
-      InvalidCmd, "SpecFlushResp" }
-      
+      InvalidCmd, "SpecFlushResp" },
       // hardware transactional memory
     { {IsRead, IsRequest, NeedsResponse}, HTMReqResp, "HTMReq" },
     { {IsRead, IsResponse}, InvalidCmd, "HTMReqResp" },

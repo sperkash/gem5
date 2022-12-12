@@ -369,10 +369,97 @@ AbstractController::functionalMemoryWrite(PacketPtr pkt)
     return num_functional_writes + 1;
 }
 
+// [InvisiSpec]
+void
+AbstractController::queueMemoryRead(const MachineID &id, Addr addr,
+                                    Cycles latency, MachineID origin, int idx, int type)
+{
+    int coreId = origin.num;
+    int sbeId = idx;
+    // type 0: non-spec 1: spec 2: expose
+    // DPRINTFR(MemSpecBuffer, "%10s MemRead (core=%d, type=%d, idx=%d, addr=%#x)\n", curTick(), coreId, type, sbeId, printAddress(addr));
+    // if idx == -1, it is a write request which cannot be spec or expose.
+    assert(!(type != 0 && sbeId == -1));
+    assert(sbeId >= -1 && sbeId <= 65);
+    assert(coreId < 8);
+    assert(type >=0 && type <= 2);
+    if (type == 0) {
+        for (int c = 0; c < 8; ++c) {
+            for (int i = 0; i < 66; ++i) {
+                if (m_specBuf[c][i].address == addr) {
+                    DPRINTFR(MemSpecBuffer, "%10s Cleared by Read (core=%d, type=%d, idx=%d, addr=%#x)\n", curTick(), c, type, i, printAddress(addr));
+                    m_specBuf[c][i].address = 0;
+                    m_specBuf[c][i].data.clear();
+                }
+            }
+        }
+    } else if (type == 1) {
+
+    } else if (type == 2) {
+        if (m_specBuf[coreId][sbeId].address == addr) {
+            DPRINTFR(MemSpecBuffer, "%10s Expose Hit (core=%d, type=%d, idx=%d, addr=%#x)\n", curTick(), coreId, type, sbeId, printAddress(addr));
+            ++m_expose_hits;
+            assert(getMemoryQueue());
+            std::shared_ptr<MemoryMsg> msg = std::make_shared<MemoryMsg>(clockEdge());
+            (*msg).m_addr = addr;
+            (*msg).m_Sender = m_machineID;
+            (*msg).m_OriginalRequestorMachId = id;
+            (*msg).m_Type = MemoryRequestType_MEMORY_READ;
+            (*msg).m_MessageSize = MessageSizeType_Response_Data;
+            (*msg).m_DataBlk = m_specBuf[coreId][sbeId].data;
+            getMemoryQueue()->enqueue(msg, clockEdge(), cyclesToTicks(Cycles(1)));
+            for (int c = 0; c < 8; ++c) {
+                for (int i = 0; i < 66; ++i) {
+                    if (m_specBuf[c][i].address == addr) {
+                        DPRINTFR(MemSpecBuffer, "%10s Cleared by Expose Hit (core=%d, type=%d, idx=%d, addr=%#x)\n", curTick(), c, type, i, printAddress(addr));
+                        m_specBuf[c][i].address = 0;
+                        m_specBuf[c][i].data.clear();
+                    }
+                }
+            }
+            return;
+        } else {
+            DPRINTFR(MemSpecBuffer, "%10s Expose Miss (core=%d, type=%d, idx=%d, addr=%#x)\n", curTick(), coreId, type, sbeId, printAddress(addr));
+            ++m_expose_misses;
+            for (int c = 0; c < 8; ++c) {
+                for (int i = 0; i < 66; ++i) {
+                    if (m_specBuf[c][i].address == addr) {
+                        DPRINTFR(MemSpecBuffer, "%10s Cleared by Expose Miss (core=%d, type=%d, idx=%d, addr=%#x)\n", curTick(), c, type, i, printAddress(addr));
+                        m_specBuf[c][i].address = 0;
+                        m_specBuf[c][i].data.clear();
+                    }
+                }
+            }
+        }
+    }
+    
+    RequestPtr req = new Request(addr, RubySystem::getBlockSizeBytes(), 0,
+                                 m_masterId);
+
+    PacketPtr pkt = Packet::createRead(req);
+    uint8_t *newData = new uint8_t[RubySystem::getBlockSizeBytes()];
+    pkt->dataDynamic(newData);
+
+    SenderState *s = new SenderState(id);
+    s->type = type;
+    s->coreId = coreId;
+    s->sbeId = sbeId;
+    pkt->pushSenderState(s);
+
+    // Use functional rather than timing accesses during warmup
+    if (RubySystem::getWarmupEnabled()) {
+        memoryPort.sendFunctional(pkt);
+        recvTimingResp(pkt);
+        return;
+    }
+
+    memoryPort.schedTimingReq(pkt, clockEdge(latency));
+}
+
 void
 AbstractController::recvTimingResp(PacketPtr pkt)
 {
-    assert(getMemRespQueue());
+    assert(getMemoryQueue());
     assert(pkt->isResponse());
 
     std::shared_ptr<MemoryMsg> msg = std::make_shared<MemoryMsg>(clockEdge());
@@ -381,6 +468,9 @@ AbstractController::recvTimingResp(PacketPtr pkt)
 
     SenderState *s = dynamic_cast<SenderState *>(pkt->senderState);
     (*msg).m_OriginalRequestorMachId = s->id;
+    int type = s->type;
+    int coreId = s->coreId;
+    int sbeId = s->sbeId;
     delete s;
 
     if (pkt->isRead()) {
@@ -390,6 +480,12 @@ AbstractController::recvTimingResp(PacketPtr pkt)
         // Copy data from the packet
         (*msg).m_DataBlk.setData(pkt->getPtr<uint8_t>(), 0,
                                  RubySystem::getBlockSizeBytes());
+        if (type == 1) {
+            DPRINTFR(MemSpecBuffer, "%10s Updated by ReadSpec (core=%d, type=%d, idx=%d, addr=%#x)\n", curTick(), coreId, type, sbeId, printAddress(pkt->getAddr()));
+            m_specBuf[coreId][sbeId].address = pkt->getAddr();
+            m_specBuf[coreId][sbeId].data.setData(pkt->getPtr<uint8_t>(), 0,
+                                                  RubySystem::getBlockSizeBytes());
+        }
     } else if (pkt->isWrite()) {
         (*msg).m_Type = MemoryRequestType_MEMORY_WB;
         (*msg).m_MessageSize = MessageSizeType_Writeback_Control;
@@ -397,7 +493,8 @@ AbstractController::recvTimingResp(PacketPtr pkt)
         panic("Incorrect packet type received from memory controller!");
     }
 
-    getMemRespQueue()->enqueue(msg, clockEdge(), cyclesToTicks(Cycles(1)));
+    getMemoryQueue()->enqueue(msg, clockEdge(), cyclesToTicks(Cycles(1)));
+    delete pkt->req;
     delete pkt;
 }
 

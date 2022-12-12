@@ -165,6 +165,9 @@ class AbstractController : public ClockedObject, public Consumer
     Port &getPort(const std::string &if_name,
                   PortID idx=InvalidPortID);
 
+    // [InvisiSpec]
+    void queueMemoryRead(const MachineID &id, Addr addr, Cycles latency, MachineID origin, int idx, int type);
+
     void recvTimingResp(PacketPtr pkt);
     Tick recvAtomic(PacketPtr pkt);
 
