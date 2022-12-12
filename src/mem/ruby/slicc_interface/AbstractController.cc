@@ -41,6 +41,7 @@
 #include "mem/ruby/slicc_interface/AbstractController.hh"
 
 #include "debug/RubyQueue.hh"
+#include "debug/MemSpecBuffer.hh"
 #include "mem/ruby/network/Network.hh"
 #include "mem/ruby/protocol/MemoryMsg.hh"
 #include "mem/ruby/system/RubySystem.hh"
@@ -131,6 +132,15 @@ void
 AbstractController::regStats()
 {
     ClockedObject::regStats();
+
+    m_expose_hits
+        .name(name() + ".expose_hits")
+        .desc("number of expose hits at LLC spec buffer")
+        .flags(Stats::nozero);
+    m_expose_misses
+        .name(name() + ".expose_misses")
+        .desc("number of expose misses at LLC spec buffer")
+        .flags(Stats::nozero);
 }
 
 void

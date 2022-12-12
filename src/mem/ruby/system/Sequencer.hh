@@ -44,6 +44,7 @@
 #include <iostream>
 #include <list>
 #include <unordered_map>
+#include <queue>
 
 #include "mem/ruby/common/Address.hh"
 #include "mem/ruby/protocol/MachineType.hh"
@@ -65,6 +66,7 @@ struct SequencerRequest
     RubyRequestType m_type;
     RubyRequestType m_second_type;
     Cycles issue_time;
+    std::vector<PacketPtr> dependentSpecRequests;
     SequencerRequest(PacketPtr _pkt, RubyRequestType _m_type,
                      RubyRequestType _m_second_type, Cycles _issue_time)
                 : pkt(_pkt), m_type(_m_type), m_second_type(_m_second_type),
@@ -82,6 +84,19 @@ struct SequencerRequest
 };
 
 std::ostream& operator<<(std::ostream& out, const SequencerRequest& obj);
+
+struct SBB // SpecBufferBlock
+{
+  Addr reqAddress;
+  unsigned reqSize;
+  DataBlock data;
+};
+
+struct SBE // SpecBufferEntry
+{
+  bool isSplit;
+  SBB blocks[2];
+};
 
 class Sequencer : public RubyPort
 {
@@ -125,6 +140,9 @@ class Sequencer : public RubyPort
                       const Cycles initialRequestTime = Cycles(0),
                       const Cycles forwardRequestTime = Cycles(0),
                       const Cycles firstResponseTime = Cycles(0));
+    
+    void specBufferHitCallback();
+    bool updateSBB(PacketPtr pkt, DataBlock& data, Addr dataAddress);
 
     void unaddressedCallback(Addr unaddressedReqId,
                              RubyRequestType requestType,
@@ -146,7 +164,7 @@ class Sequencer : public RubyPort
     virtual void print(std::ostream& out) const;
 
     void markRemoved();
-    void evictionCallback(Addr address);
+    void evictionCallback(Addr address, bool external);
     int coreId() const { return m_coreId; }
 
     virtual int functionalWrite(Packet *func_pkt) override;
@@ -289,8 +307,12 @@ class Sequencer : public RubyPort
     std::vector<statistics::Histogram *> m_FirstResponseToCompletionDelayHist;
     std::vector<statistics::Counter> m_IncompleteTimes;
 
-    std::vector<SBE> m_specBuf;
     EventFunctionWrapper deadlockCheckEvent;
+
+    // [InvisiSpec]
+    std::vector<SBE> m_specBuf;
+    std::queue<std::pair<PacketPtr, Tick>> m_specRequestQueue;
+    EventFunctionWrapper specBufferHitEvent;
 
     // support for LL/SC
 

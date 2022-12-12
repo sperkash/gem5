@@ -368,6 +368,10 @@ class AbstractController : public ClockedObject, public Consumer
     const Cycles m_mandatory_queue_latency;
     bool m_waiting_mem_retry;
 
+    // [InvisiSpec]
+    Stats::Scalar m_expose_hits;
+    Stats::Scalar m_expose_misses;
+
     /**
      * Port that forwards requests and receives responses from the
      * memory controller.
@@ -400,6 +404,11 @@ class AbstractController : public ClockedObject, public Consumer
         // Id of the machine from which the request originated.
         MachineID id;
 
+        // [InvisiSpec]
+        int type;
+        int coreId;
+        int sbeId;
+
         SenderState(MachineID _id) : id(_id)
         {}
     };
@@ -407,6 +416,15 @@ class AbstractController : public ClockedObject, public Consumer
   private:
     /** The address range to which the controller responds on the CPU side. */
     const AddrRangeList addrRanges;
+
+    // [InvisiSpec]
+    struct SBE
+    {
+      Addr address;
+      DataBlock data;
+    };
+
+    SBE m_specBuf[8][66];
 
     typedef std::unordered_map<MachineType, MachineID> AddrMapEntry;
 

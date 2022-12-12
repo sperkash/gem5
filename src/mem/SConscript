@@ -155,3 +155,8 @@ DebugFlag('TokenPort')
 DebugFlag("MemChecker")
 DebugFlag("MemCheckerMonitor")
 DebugFlag("QOS")
+
+# [InvisiSpec]
+DebugFlag('SpecBuffer')
+DebugFlag('SpecBufferValidate')
+DebugFlag('MemSpecBuffer')

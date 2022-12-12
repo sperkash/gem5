@@ -491,6 +491,7 @@ RequestPort::sendFunctional(PacketPtr pkt) const
     }
 }
 
+// [InvisiSpec] Request from CPU to Ruby
 inline bool
 RequestPort::sendTimingReq(PacketPtr pkt)
 {

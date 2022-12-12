@@ -408,6 +408,17 @@ def addCommonOptions(parser):
         "once with: system.cpu[:].mmu. If given multiple times, dump stats "
         "that are present under any of the roots. If not given, dump all "
         "stats. ")
+    # [InvisiSpec] add options to configure needsTSO and scheme
+    parser.add_option("--scheme", default=None, action="store", type="choice",
+            choices=["UnsafeBaseline", "FuturisticSafeFence",
+            "SpectreSafeFence", "FuturisticSafeInvisibleSpec",
+            "SpectreSafeInvisibleSpec"],
+            help="choose baseline or defense designs to evaluate")
+    parser.add_option("--needsTSO", default=None, action="store", type="int",
+                        help="Select TSO or RC. Set unzero to use TSO.")
+    parser.add_option("--allowSpecBuffHit", default=None, action="store",
+            type="int",
+            help="Allow to reuse spec buffer entries. Set unzero to reuse.")
 
 
 def addSEOptions(parser):
