@@ -289,6 +289,7 @@ class Sequencer : public RubyPort
     std::vector<statistics::Histogram *> m_FirstResponseToCompletionDelayHist;
     std::vector<statistics::Counter> m_IncompleteTimes;
 
+    std::vector<SBE> m_specBuf;
     EventFunctionWrapper deadlockCheckEvent;
 
     // support for LL/SC

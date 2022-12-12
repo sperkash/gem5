@@ -149,7 +149,7 @@ structure (Sequencer, external = "yes") {
   bool llscCheckMonitor(Addr);
   void llscClearLocalMonitor();
 
-  void evictionCallback(Addr);
+  void evictionCallback(Addr, bool);
   void recordRequestType(SequencerRequestType);
   bool checkResourceAvailable(CacheResourceType, Addr);
 }
@@ -177,6 +177,7 @@ structure(RubyRequest, desc="...", interface="Message", external="yes") {
   int htmTransactionUid,     desc="Used to identify the unique HTM transaction that produced this request";
   bool isTlbi,               desc="Memory request is a TLB shootdown (invalidation) operation";
   Addr tlbiTransactionUid,   desc="Unique identifier of the TLB shootdown operation that produced this request";
+  int idx,                   desc="LQ index";
 
   RequestPtr getRequestPtr();
 }

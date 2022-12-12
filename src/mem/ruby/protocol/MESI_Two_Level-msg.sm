@@ -37,6 +37,10 @@ enumeration(CoherenceRequestType, desc="...") {
   INV,       desc="INValidate";
   PUTX,      desc="Replacement message";
 
+  // [InvisiSpec]
+  GETSPEC,   desc="Get Speculatively";
+  EXPOSE,    desc="Expose";
+
   WB_ACK,    desc="Writeback ack";
 
   DMA_READ, desc="DMA Read";
@@ -68,6 +72,10 @@ structure(RequestMsg, desc="...", interface="Message") {
   int Len;
   bool Dirty, default="false",  desc="Dirty bit";
   PrefetchBit Prefetch,         desc="Is this a prefetch request";
+
+  // [InvisiSpec]
+  MachineID origin;
+  int idx, default="-1",        desc="LQ index";
 
   bool functionalRead(Packet *pkt) {
     // Only PUTX messages contains the data block
